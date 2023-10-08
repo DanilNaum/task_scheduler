@@ -6,7 +6,7 @@ import (
 	"strconv"
 	"time"
 )
-func Wait(thread int,args []string){
+func Wait(thread int,args []string){ // использован лишний аргумент thread, который не предпологался в задаче, не придумал как передать поток на котором выполняется функция другим способом
 	if len(args) == 3{
 		min_time,err := strconv.Atoi(args[1])
 			if err != nil {

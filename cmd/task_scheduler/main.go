@@ -13,14 +13,16 @@ func main() {
 	var second_task []string
 	var minute_task []string
 	var hour_task []string
-	mu := new(sync.Mutex)
+	mu := new(sync.Mutex) 
 	wg := new(sync.WaitGroup)
-	numberOfSimultaneousRequests := 5
-	data_channel := make(chan string)
-	go func(){
+	numberOfSimultaneousRequests := 5 //константа определенная условиями задания
+	data_channel := make(chan string) // канал используемый для передачи очереди задач
+	go func(){ //функция обновления данных из файла tasks.txt, данные записываются в 3 массива в зависимости от частоты выполнения и обновляются при каждой новой итерации
+		//возможно это не очень оптимально и нужно менять данные только при изменении файла. 
+		//Так же может быть допустима задержка, тогда обновлять файл можно с некоторой заранее заданой переодичностью
 		defer close(data_channel)
 		for{
-			dir, err := os.Getwd()
+			dir, err := os.Getwd() //не разобрался как указывать относительный путь к файлу, поэтому пришлось запрашивать дирректорию
 			if err != nil {
 				panic(err)
 			}
@@ -50,7 +52,7 @@ func main() {
 			file.Close()
 		}
 	}()
-	go func() {
+	go func() { // функция передачи задач на выполнение с определенной переодичностью
 		
 		tickSecond := time.NewTicker(time.Second)
 		tickMinute := time.NewTicker(time.Minute)
@@ -82,21 +84,23 @@ func main() {
 		}
 	}()
 
-	channel := make(chan []string)
-	channel2 := make(chan struct{}, numberOfSimultaneousRequests)
+	task := make(chan []string)
+	isPrewTaskDone := make(chan struct{}, numberOfSimultaneousRequests)
 	
-	go func(){
-		defer close(channel)
-		defer close(channel2)
+	go func(){ // функция проверки наличия свободных потоков,
+		// паралельно перобразует строку в массив строк, для более удобной работы в дальнейшем
+		// в перспективе можно избавиться от этой функции и канала, тк он дублирует работу каналов thread
+		defer close(task)
+		defer close(isPrewTaskDone)
 		for s := range data_channel{
 			a := strings.Split(s," ")
-			channel2 <- struct{}{} // канал для проверки завершения выполнения
+			isPrewTaskDone <- struct{}{} // канал для проверки завершения выполнения
 				//  предыдущей задачи и ограничения количества одновреммено выполняемых задач
-			channel <- a	// канал для передачи следующей задачи в фукцию
+			task <- a	// канал для передачи следующей задачи в фукцию
 		}
 	}()
 	
-	// Наличие структуры на thread означает, что он свободен и можно передать на него задачу
+	// Наличие структуры на thread означает, что поток свободен и можно передать на него следующую задачу
 	thread := make(map[int] chan struct{})
 	for i := 0; i < 5; i++ {
 		thread[i] = make(chan struct{},1)
@@ -104,7 +108,7 @@ func main() {
 		defer close(thread[i])
 	}
 		
-	for a := range channel{
+	for a := range task{ // расперделение задач по потокам
 		wg.Add(1)
 		go func(wg *sync.WaitGroup, a []string){
 			defer wg.Done()
@@ -125,7 +129,7 @@ func main() {
 				testtasks.Wait(5,a[2:])
 				thread[4] <-  struct{}{}	
 			}
-			<- channel2
+			<- isPrewTaskDone
 			
 		}(wg,a)
 	}
