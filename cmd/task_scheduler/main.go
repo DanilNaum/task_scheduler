@@ -83,35 +83,21 @@ func main() {
 			}
 		}
 	}()
-
-	task := make(chan []string)
-	isPrewTaskDone := make(chan struct{}, numberOfSimultaneousRequests)
-	
-	go func(){ // функция проверки наличия свободных потоков,
-		// паралельно перобразует строку в массив строк, для более удобной работы в дальнейшем
-		// в перспективе можно избавиться от этой функции и канала, тк он дублирует работу каналов thread
-		defer close(task)
-		defer close(isPrewTaskDone)
-		for s := range data_channel{
-			a := strings.Split(s," ")
-			isPrewTaskDone <- struct{}{} // канал для проверки завершения выполнения
-				//  предыдущей задачи и ограничения количества одновреммено выполняемых задач
-			task <- a	// канал для передачи следующей задачи в фукцию
-		}
-	}()
 	
 	// Наличие структуры на thread означает, что поток свободен и можно передать на него следующую задачу
 	thread := make(map[int] chan struct{})
-	for i := 0; i < 5; i++ {
+	for i := 0; i < numberOfSimultaneousRequests; i++ {
 		thread[i] = make(chan struct{},1)
 		thread[i] <-  struct{}{}
 		defer close(thread[i])
 	}
-		
-	for a := range task{ // расперделение задач по потокам
+
+	for s := range data_channel{
+		a := strings.Split(s," ")
 		wg.Add(1)
 		go func(wg *sync.WaitGroup, a []string){
 			defer wg.Done()
+			
 			select {
 			case <-thread[0]:
 				testtasks.Wait(1,a[2:])
@@ -128,9 +114,7 @@ func main() {
 			case <-thread[4]:
 				testtasks.Wait(5,a[2:])
 				thread[4] <-  struct{}{}	
-			}
-			<- isPrewTaskDone
-			
+			}		
 		}(wg,a)
 	}
 	wg.Wait()
